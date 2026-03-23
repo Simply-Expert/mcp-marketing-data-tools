@@ -62,291 +62,303 @@ const server = new McpServer({
 });
 
 // ============================================================
-// Stripe Tools
+// Stripe Tools (requires STRIPE_SECRET_KEY)
 // ============================================================
 
-const stripe = new StripeClient();
+let stripe: StripeClient | null = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  stripe = new StripeClient();
 
-server.tool(
-  'stripe_get_mrr',
-  'Get Monthly Recurring Revenue from Stripe for a given month',
-  StripeMRRInputSchema.shape,
-  async ({ period }) => {
-    const result = await stripe.getMRR(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'stripe_get_mrr',
+    'Get Monthly Recurring Revenue from Stripe for a given month',
+    StripeMRRInputSchema.shape,
+    async ({ period }) => {
+      const result = await stripe!.getMRR(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'stripe_get_subscriptions',
-  'Get subscription counts (new, active, canceled, past due) for a given month',
-  StripeSubscriptionsInputSchema.shape,
-  async ({ period }) => {
-    const result = await stripe.getSubscriptions(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'stripe_get_subscriptions',
+    'Get subscription counts (new, active, canceled, past due) for a given month',
+    StripeSubscriptionsInputSchema.shape,
+    async ({ period }) => {
+      const result = await stripe!.getSubscriptions(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'stripe_get_churn',
-  'Get churn rate and canceled subscription count for a given month',
-  StripeChurnInputSchema.shape,
-  async ({ period }) => {
-    const result = await stripe.getChurn(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'stripe_get_churn',
+    'Get churn rate and canceled subscription count for a given month',
+    StripeChurnInputSchema.shape,
+    async ({ period }) => {
+      const result = await stripe!.getChurn(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'stripe_get_revenue',
-  'Get total Stripe revenue for a given month (all paid invoices)',
-  StripeRevenueInputSchema.shape,
-  async ({ period }) => {
-    const result = await stripe.getRevenue(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'stripe_get_revenue',
+    'Get total Stripe revenue for a given month (all paid invoices)',
+    StripeRevenueInputSchema.shape,
+    async ({ period }) => {
+      const result = await stripe!.getRevenue(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'stripe_get_revenue_by_plan',
-  'Get revenue broken down by subscription plan/product for a given month',
-  StripeRevenueByPlanInputSchema.shape,
-  async ({ period }) => {
-    const result = await stripe.getRevenueByPlan(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'stripe_get_revenue_by_plan',
+    'Get revenue broken down by subscription plan/product for a given month',
+    StripeRevenueByPlanInputSchema.shape,
+    async ({ period }) => {
+      const result = await stripe!.getRevenueByPlan(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'stripe_get_revenue_by_country',
-  'Get revenue broken down by customer country for a given month',
-  StripeRevenueByCountryInputSchema.shape,
-  async ({ period }) => {
-    const result = await stripe.getRevenueByCountry(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'stripe_get_revenue_by_country',
+    'Get revenue broken down by customer country for a given month',
+    StripeRevenueByCountryInputSchema.shape,
+    async ({ period }) => {
+      const result = await stripe!.getRevenueByCountry(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'stripe_get_revenue_by_type',
-  'Get revenue split by new subscriptions vs renewals for a given month',
-  StripeRevenueByTypeInputSchema.shape,
-  async ({ period }) => {
-    const result = await stripe.getRevenueByType(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'stripe_get_revenue_by_type',
+    'Get revenue split by new subscriptions vs renewals for a given month',
+    StripeRevenueByTypeInputSchema.shape,
+    async ({ period }) => {
+      const result = await stripe!.getRevenueByType(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'stripe_get_daily_revenue',
-  'Get Stripe revenue broken down by day for a date range. Shows revenue, fees, new subscriptions, and renewals per day.',
-  StripeDailyRevenueInputSchema.shape,
-  async ({ start_date, end_date }) => {
-    const result = await stripe.getDailyRevenue(start_date, end_date);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-// ============================================================
-// App Store Connect Tools
-// ============================================================
-
-const appStore = new AppStoreClient();
-
-server.tool(
-  'appstore_get_downloads',
-  'Get iOS app downloads for a given month, optionally broken down by country',
-  AppStoreDownloadsInputSchema.shape,
-  async ({ period, byCountry }) => {
-    const result = await appStore.getDownloads(period, byCountry);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'appstore_get_revenue',
-  'Get iOS app revenue (IAP + subscriptions) for a given month',
-  AppStoreRevenueInputSchema.shape,
-  async ({ period, type }) => {
-    const result = await appStore.getRevenue(period, type);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'appstore_get_reviews',
-  'Get recent App Store reviews for a given month',
-  AppStoreReviewsInputSchema.shape,
-  async ({ period, limit }) => {
-    const result = await appStore.getReviews(period, limit);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'appstore_get_ratings',
-  'Get App Store average rating and distribution. Uses iTunes Lookup API for accurate cumulative ratings (including star-only) across top 30 markets, plus text-review distribution for the given month.',
-  AppStoreRatingsInputSchema.shape,
-  async ({ period }) => {
-    const result = await appStore.getRatings(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'appstore_get_sales_report',
-  'Get raw App Store sales report rows for a given month. Each row has: productTypeId, units, developerProceeds (per-unit), proceedsCurrency, countryCode, title, subscription (New/Renewal), subscriptionPeriod, proceedsReason, orderType, device, promoCode. Filter by productType: "IAY" for subscriptions, "1F" for first-time downloads, "3F" for redownloads, "7F" for updates.',
-  AppStoreSalesReportInputSchema.shape,
-  async ({ period, productType }) => {
-    const result = await appStore.getSalesRows(period, productType);
-    return { content: [{ type: 'text' as const, text: JSON.stringify({ period, rowCount: result.length, rows: result }, null, 2) }] };
-  }
-);
+  server.tool(
+    'stripe_get_daily_revenue',
+    'Get Stripe revenue broken down by day for a date range. Shows revenue, fees, new subscriptions, and renewals per day.',
+    StripeDailyRevenueInputSchema.shape,
+    async ({ start_date, end_date }) => {
+      const result = await stripe!.getDailyRevenue(start_date, end_date);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+}
 
 // ============================================================
-// Google Play Tools
+// App Store Connect Tools (requires APPSTORE_PRIVATE_KEY_PATH)
 // ============================================================
 
-const playStore = new PlayStoreClient();
+let appStore: AppStoreClient | null = null;
+if (process.env.APPSTORE_PRIVATE_KEY_PATH) {
+  appStore = new AppStoreClient();
 
-server.tool(
-  'playstore_get_downloads',
-  'Get Android app downloads for a given month',
-  PlayStoreDownloadsInputSchema.shape,
-  async ({ period, byCountry }) => {
-    const result = await playStore.getDownloads(period, byCountry);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'appstore_get_downloads',
+    'Get iOS app downloads for a given month, optionally broken down by country',
+    AppStoreDownloadsInputSchema.shape,
+    async ({ period, byCountry }) => {
+      const result = await appStore!.getDownloads(period, byCountry);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'playstore_get_revenue',
-  'Get Android app revenue for a given month',
-  PlayStoreRevenueInputSchema.shape,
-  async ({ period }) => {
-    const result = await playStore.getRevenue(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'appstore_get_revenue',
+    'Get iOS app revenue (IAP + subscriptions) for a given month',
+    AppStoreRevenueInputSchema.shape,
+    async ({ period, type }) => {
+      const result = await appStore!.getRevenue(period, type);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'playstore_get_reviews',
-  'Get Google Play reviews for a given month',
-  PlayStoreReviewsInputSchema.shape,
-  async ({ period, limit }) => {
-    const result = await playStore.getReviews(period, limit);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'appstore_get_reviews',
+    'Get recent App Store reviews for a given month',
+    AppStoreReviewsInputSchema.shape,
+    async ({ period, limit }) => {
+      const result = await appStore!.getReviews(period, limit);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'playstore_get_stability',
-  'Get Android app stability metrics (crashes, ANRs, crash-free rate) for a given month',
-  PlayStoreStabilityInputSchema.shape,
-  async ({ period }) => {
-    const result = await playStore.getStability(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'appstore_get_ratings',
+    'Get App Store average rating and distribution. Uses iTunes Lookup API for accurate cumulative ratings (including star-only) across top 30 markets, plus text-review distribution for the given month.',
+    AppStoreRatingsInputSchema.shape,
+    async ({ period }) => {
+      const result = await appStore!.getRatings(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-// ============================================================
-// Meta Tools (Organic Social + Ads)
-// ============================================================
-
-const meta = new MetaClient();
-
-server.tool(
-  'meta_get_page_insights',
-  'Get Facebook Page impressions, reach, engagement, and fans for a given month',
-  MetaPageInsightsInputSchema.shape,
-  async ({ period }) => {
-    const result = await meta.getPageInsights(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'meta_get_instagram_insights',
-  'Get Instagram followers, reach, impressions, and profile views for a given month',
-  MetaInstagramInsightsInputSchema.shape,
-  async ({ period }) => {
-    const result = await meta.getInstagramInsights(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'meta_get_instagram_posts',
-  'Get top Instagram posts with engagement metrics for a given month',
-  MetaInstagramPostsInputSchema.shape,
-  async ({ period, limit }) => {
-    const result = await meta.getInstagramPosts(period, limit);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'meta_get_facebook_video_posts',
-  'Get Facebook video posts with view counts for a given month',
-  MetaFacebookVideoPostsInputSchema.shape,
-  async ({ period }) => {
-    const result = await meta.getFacebookVideoPosts(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'meta_get_instagram_video_posts',
-  'Get Instagram video/reel posts with view counts, likes, and comments for a given month',
-  MetaInstagramVideoPostsInputSchema.shape,
-  async ({ period }) => {
-    const result = await meta.getInstagramVideoPosts(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'meta_get_ad_spend',
-  'Get total monthly Meta ad spend, impressions, and reach',
-  MetaAdSpendInputSchema.shape,
-  async ({ period }) => {
-    const result = await meta.getAdSpend(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'meta_get_ad_performance',
-  'Get Meta campaign-level ad performance metrics (CTR, CPC, CPM)',
-  MetaAdPerformanceInputSchema.shape,
-  async ({ period }) => {
-    const result = await meta.getAdPerformance(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'meta_get_ad_conversions',
-  'Get Meta ad conversions, ROAS, and CPA for a given month',
-  MetaAdConversionsInputSchema.shape,
-  async ({ period }) => {
-    const result = await meta.getAdConversions(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
-
-server.tool(
-  'meta_get_ad_performance_by_country',
-  'Get Meta ad performance broken down by country for a given month',
-  MetaAdPerformanceByCountryInputSchema.shape,
-  async ({ period }) => {
-    const result = await meta.getAdPerformanceByCountry(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'appstore_get_sales_report',
+    'Get raw App Store sales report rows for a given month. Each row has: productTypeId, units, developerProceeds (per-unit), proceedsCurrency, countryCode, title, subscription (New/Renewal), subscriptionPeriod, proceedsReason, orderType, device, promoCode. Filter by productType: "IAY" for subscriptions, "1F" for first-time downloads, "3F" for redownloads, "7F" for updates.',
+    AppStoreSalesReportInputSchema.shape,
+    async ({ period, productType }) => {
+      const result = await appStore!.getSalesRows(period, productType);
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ period, rowCount: result.length, rows: result }, null, 2) }] };
+    }
+  );
+}
 
 // ============================================================
-// Google Search Console Tools
+// Google Play Tools (requires GOOGLE_SERVICE_ACCOUNT_KEY_PATH + GOOGLE_PLAY_PACKAGE_NAME)
+// ============================================================
+
+let playStore: PlayStoreClient | null = null;
+if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH && process.env.GOOGLE_PLAY_PACKAGE_NAME) {
+  playStore = new PlayStoreClient();
+
+  server.tool(
+    'playstore_get_downloads',
+    'Get Android app downloads for a given month',
+    PlayStoreDownloadsInputSchema.shape,
+    async ({ period, byCountry }) => {
+      const result = await playStore!.getDownloads(period, byCountry);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'playstore_get_revenue',
+    'Get Android app revenue for a given month',
+    PlayStoreRevenueInputSchema.shape,
+    async ({ period }) => {
+      const result = await playStore!.getRevenue(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'playstore_get_reviews',
+    'Get Google Play reviews for a given month',
+    PlayStoreReviewsInputSchema.shape,
+    async ({ period, limit }) => {
+      const result = await playStore!.getReviews(period, limit);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'playstore_get_stability',
+    'Get Android app stability metrics (crashes, ANRs, crash-free rate) for a given month',
+    PlayStoreStabilityInputSchema.shape,
+    async ({ period }) => {
+      const result = await playStore!.getStability(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+}
+
+// ============================================================
+// Meta Tools (requires META_ACCESS_TOKEN)
+// ============================================================
+
+let meta: MetaClient | null = null;
+if (process.env.META_ACCESS_TOKEN) {
+  meta = new MetaClient();
+
+  server.tool(
+    'meta_get_page_insights',
+    'Get Facebook Page impressions, reach, engagement, and fans for a given month',
+    MetaPageInsightsInputSchema.shape,
+    async ({ period }) => {
+      const result = await meta!.getPageInsights(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'meta_get_instagram_insights',
+    'Get Instagram followers, reach, impressions, and profile views for a given month',
+    MetaInstagramInsightsInputSchema.shape,
+    async ({ period }) => {
+      const result = await meta!.getInstagramInsights(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'meta_get_instagram_posts',
+    'Get top Instagram posts with engagement metrics for a given month',
+    MetaInstagramPostsInputSchema.shape,
+    async ({ period, limit }) => {
+      const result = await meta!.getInstagramPosts(period, limit);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'meta_get_facebook_video_posts',
+    'Get Facebook video posts with view counts for a given month',
+    MetaFacebookVideoPostsInputSchema.shape,
+    async ({ period }) => {
+      const result = await meta!.getFacebookVideoPosts(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'meta_get_instagram_video_posts',
+    'Get Instagram video/reel posts with view counts, likes, and comments for a given month',
+    MetaInstagramVideoPostsInputSchema.shape,
+    async ({ period }) => {
+      const result = await meta!.getInstagramVideoPosts(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'meta_get_ad_spend',
+    'Get total monthly Meta ad spend, impressions, and reach',
+    MetaAdSpendInputSchema.shape,
+    async ({ period }) => {
+      const result = await meta!.getAdSpend(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'meta_get_ad_performance',
+    'Get Meta campaign-level ad performance metrics (CTR, CPC, CPM)',
+    MetaAdPerformanceInputSchema.shape,
+    async ({ period }) => {
+      const result = await meta!.getAdPerformance(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'meta_get_ad_conversions',
+    'Get Meta ad conversions, ROAS, and CPA for a given month',
+    MetaAdConversionsInputSchema.shape,
+    async ({ period }) => {
+      const result = await meta!.getAdConversions(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'meta_get_ad_performance_by_country',
+    'Get Meta ad performance broken down by country for a given month',
+    MetaAdPerformanceByCountryInputSchema.shape,
+    async ({ period }) => {
+      const result = await meta!.getAdPerformanceByCountry(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+}
+
+// ============================================================
+// Google Search Console Tools (requires GOOGLE_SERVICE_ACCOUNT_KEY_PATH + GOOGLE_SEARCH_CONSOLE_SITE_URL)
 // ============================================================
 
 let _gsc: SearchConsoleClient | null = null;
@@ -355,55 +367,57 @@ function getGsc(): SearchConsoleClient {
   return _gsc;
 }
 
-server.tool(
-  'gsc_get_overview',
-  'Get total clicks, impressions, average CTR, and average position from Google Search Console for a given month',
-  GscOverviewInputSchema.shape,
-  async ({ period }) => {
-    const result = await getGsc().getOverview(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH && process.env.GOOGLE_SEARCH_CONSOLE_SITE_URL) {
+  server.tool(
+    'gsc_get_overview',
+    'Get total clicks, impressions, average CTR, and average position from Google Search Console for a given month',
+    GscOverviewInputSchema.shape,
+    async ({ period }) => {
+      const result = await getGsc().getOverview(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'gsc_get_top_queries',
-  'Get top search queries ranked by clicks from Google Search Console for a given month',
-  GscTopQueriesInputSchema.shape,
-  async ({ period, limit }) => {
-    const result = await getGsc().getTopQueries(period, limit);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'gsc_get_top_queries',
+    'Get top search queries ranked by clicks from Google Search Console for a given month',
+    GscTopQueriesInputSchema.shape,
+    async ({ period, limit }) => {
+      const result = await getGsc().getTopQueries(period, limit);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'gsc_get_top_pages',
-  'Get top landing pages ranked by clicks from Google Search Console for a given month',
-  GscTopPagesInputSchema.shape,
-  async ({ period, limit }) => {
-    const result = await getGsc().getTopPages(period, limit);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'gsc_get_top_pages',
+    'Get top landing pages ranked by clicks from Google Search Console for a given month',
+    GscTopPagesInputSchema.shape,
+    async ({ period, limit }) => {
+      const result = await getGsc().getTopPages(period, limit);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'gsc_get_performance_by_country',
-  'Get clicks/impressions/CTR/position by country from Google Search Console for a given month',
-  GscByCountryInputSchema.shape,
-  async ({ period }) => {
-    const result = await getGsc().getPerformanceByCountry(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'gsc_get_performance_by_country',
+    'Get clicks/impressions/CTR/position by country from Google Search Console for a given month',
+    GscByCountryInputSchema.shape,
+    async ({ period }) => {
+      const result = await getGsc().getPerformanceByCountry(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 
-server.tool(
-  'gsc_get_performance_by_device',
-  'Get clicks/impressions/CTR/position by device (desktop/mobile/tablet) from Google Search Console for a given month',
-  GscByDeviceInputSchema.shape,
-  async ({ period }) => {
-    const result = await getGsc().getPerformanceByDevice(period);
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-  }
-);
+  server.tool(
+    'gsc_get_performance_by_device',
+    'Get clicks/impressions/CTR/position by device (desktop/mobile/tablet) from Google Search Console for a given month',
+    GscByDeviceInputSchema.shape,
+    async ({ period }) => {
+      const result = await getGsc().getPerformanceByDevice(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+}
 
 // ============================================================
 // Report Tools
@@ -416,7 +430,13 @@ server.tool(
   async ({ period }) => {
     let gsc: SearchConsoleClient | undefined;
     try { gsc = getGsc(); } catch {}
-    const snapshot = await collectData(period, { stripe, appStore, playStore, meta, gsc });
+    const snapshot = await collectData(period, {
+      stripe: stripe ?? undefined,
+      appStore: appStore ?? undefined,
+      playStore: playStore ?? undefined,
+      meta: meta ?? undefined,
+      gsc,
+    });
     return { content: [{ type: 'text' as const, text: JSON.stringify(snapshot, null, 2) }] };
   }
 );
@@ -495,9 +515,16 @@ server.tool(
 // ============================================================
 
 async function main() {
+  const services = [
+    stripe && 'Stripe',
+    appStore && 'App Store',
+    playStore && 'Play Store',
+    meta && 'Meta',
+    process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH && process.env.GOOGLE_SEARCH_CONSOLE_SITE_URL && 'Search Console',
+  ].filter(Boolean);
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('Marketing Report MCP Server running on stdio');
+  console.error(`Marketing Report MCP Server running on stdio (active: ${services.length ? services.join(', ') : 'none'})`);
 }
 
 main().catch((error) => {
