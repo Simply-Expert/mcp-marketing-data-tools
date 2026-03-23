@@ -1,0 +1,26 @@
+{
+  "name": "marketing-report-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for generating monthly marketing reports from multiple platforms",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.1",
+    "googleapis": "^144.0.0",
+    "js-yaml": "^4.1.0",
+    "jsonwebtoken": "^9.0.0",
+    "stripe": "^17.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.mcp.json
+keys/
+*.p8
+data/snapshots/
+data/reports/
+data/cache/
+*.tsbuildinfo
+.claude/
