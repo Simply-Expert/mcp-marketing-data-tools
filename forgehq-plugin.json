@@ -1,0 +1,30 @@
+{
+  "name": "marketing-report",
+  "version": "1.0.0",
+  "description": "Marketing analytics MCP server — Stripe, App Store, Google Play, Meta, Google Search Console (31 tools)",
+  "servers": [
+    {
+      "name": "marketing-report",
+      "type": "mcp_server",
+      "command": "node",
+      "args": ["dist/index.js"],
+      "credentials": [
+        { "key": "STRIPE_SECRET_KEY", "description": "Stripe secret or restricted API key", "required": false },
+        { "key": "APPSTORE_ISSUER_ID", "description": "App Store Connect Issuer ID", "required": false },
+        { "key": "APPSTORE_KEY_ID", "description": "App Store Connect Key ID", "required": false },
+        { "key": "APPSTORE_PRIVATE_KEY_PATH", "description": "App Store Connect .p8 private key", "required": false, "type": "file" },
+        { "key": "APPSTORE_VENDOR_NUMBER", "description": "App Store Connect vendor number", "required": false },
+        { "key": "APPSTORE_APP_ID", "description": "App Store app ID", "required": false },
+        { "key": "GOOGLE_SERVICE_ACCOUNT_KEY_PATH", "description": "Google Cloud service account JSON key", "required": false, "type": "file" },
+        { "key": "GOOGLE_PLAY_PACKAGE_NAME", "description": "Android app package name (e.g. com.example.app)", "required": false },
+        { "key": "GOOGLE_PLAY_REPORTS_BUCKET", "description": "GCS bucket for Play Store financial reports", "required": false },
+        { "key": "GOOGLE_SEARCH_CONSOLE_SITE_URL", "description": "Google Search Console site URL", "required": false },
+        { "key": "META_ACCESS_TOKEN", "description": "Meta Graph API long-lived access token", "required": false },
+        { "key": "META_PAGE_ID", "description": "Facebook Page ID", "required": false },
+        { "key": "META_INSTAGRAM_ACCOUNT_ID", "description": "Instagram Business Account ID", "required": false },
+        { "key": "META_AD_ACCOUNT_ID", "description": "Meta Ads account ID", "required": false },
+        { "key": "DATA_DIR", "description": "Directory for storing data snapshots (defaults to ./data)", "required": false }
+      ]
+    }
+  ]
+}
