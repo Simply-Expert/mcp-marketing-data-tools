@@ -11,6 +11,9 @@ import type {
   AppStoreRatings,
   AppStoreCountryRating,
   AppStoreSalesRow,
+  SubscriptionEventRow,
+  CohortRetentionResult,
+  CohortMonthRetention,
 } from '../types.js';
 
 interface AppStoreConfig {
@@ -85,13 +88,29 @@ export class AppStoreClient {
 
   /** Request a sales report from App Store Connect (returns TSV) */
   private async getSalesReport(period: string, reportType: string, reportSubType: string): Promise<string> {
-    // Sales reports use YYYY-MM format for monthly
+    return this.fetchReport({
+      reportType,
+      reportSubType,
+      frequency: 'MONTHLY',
+      reportDate: period,
+    });
+  }
+
+  /** Generic report fetcher — supports any reportType/frequency/version combo. Returns decoded TSV. */
+  private async fetchReport(params: {
+    reportType: string;
+    reportSubType: string;
+    frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+    reportDate: string;
+    version?: string;
+  }): Promise<string> {
     const url = new URL('https://api.appstoreconnect.apple.com/v1/salesReports');
     url.searchParams.set('filter[vendorNumber]', this.config.vendorNumber);
-    url.searchParams.set('filter[reportType]', reportType);
-    url.searchParams.set('filter[reportSubType]', reportSubType);
-    url.searchParams.set('filter[frequency]', 'MONTHLY');
-    url.searchParams.set('filter[reportDate]', period);
+    url.searchParams.set('filter[reportType]', params.reportType);
+    url.searchParams.set('filter[reportSubType]', params.reportSubType);
+    url.searchParams.set('filter[frequency]', params.frequency);
+    url.searchParams.set('filter[reportDate]', params.reportDate);
+    if (params.version) url.searchParams.set('filter[version]', params.version);
 
     const token = this.generateToken();
     const response = await fetch(url.toString(), {
@@ -103,10 +122,9 @@ export class AppStoreClient {
 
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Sales report error ${response.status}: ${text}`);
+      throw new Error(`Report error ${response.status} (${params.reportType}/${params.frequency}/${params.reportDate}): ${text}`);
     }
 
-    // Response is gzip-compressed TSV
     const buffer = await response.arrayBuffer();
     const decompressed = await decompress(new Uint8Array(buffer));
     return new TextDecoder().decode(decompressed);
@@ -155,6 +173,170 @@ export class AppStoreClient {
     }
 
     return rows;
+  }
+
+  /**
+   * Fetch one daily SUBSCRIPTION_EVENT report. Apple retains daily reports for 365 days.
+   * Returns [] for dates with no events (404 from Apple).
+   */
+  async getSubscriptionEvents(date: string): Promise<SubscriptionEventRow[]> {
+    return cachedFetch<SubscriptionEventRow[]>(
+      'appstore', 'subscription-event', date,
+      () => this.fetchSubscriptionEvents(date),
+    );
+  }
+
+  private async fetchSubscriptionEvents(date: string): Promise<SubscriptionEventRow[]> {
+    let tsv: string;
+    try {
+      tsv = await this.fetchReport({
+        reportType: 'SUBSCRIPTION_EVENT',
+        reportSubType: 'SUMMARY',
+        frequency: 'DAILY',
+        reportDate: date,
+        version: '1_4',
+      });
+    } catch (err) {
+      const msg = (err as Error).message;
+      // 404 = no data for this date (e.g. weekends or pre-launch). Treat as empty.
+      if (msg.includes(' 404 ') || msg.includes('There were no')) return [];
+      throw err;
+    }
+
+    const lines = tsv.trim().split('\n');
+    if (lines.length < 2) return [];
+    const headers = lines[0].split('\t');
+    const idx = (name: string) => headers.indexOf(name);
+
+    const rows: SubscriptionEventRow[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split('\t');
+      if (cols.length < 3) continue;
+      // Apple emits dates as MM/DD/YYYY in subscription_event reports — normalize to YYYY-MM-DD.
+      const eventDateRaw = cols[idx('Event Date')] || '';
+      const originalStartRaw = cols[idx('Original Start Date')] || '';
+      rows.push({
+        eventDate: normalizeDate(eventDateRaw),
+        event: cols[idx('Event')] || '',
+        appAppleId: cols[idx('App Apple ID')] || '',
+        subscriptionAppleId: cols[idx('Subscription Apple ID')] || '',
+        subscriptionGroupId: cols[idx('Subscription Group ID')] || '',
+        standardSubscriptionDuration: cols[idx('Standard Subscription Duration')] || '',
+        subscriptionOfferType: cols[idx('Subscription Offer Type')] || '',
+        subscriptionOfferDuration: cols[idx('Subscription Offer Duration')] || '',
+        marketingOptIn: cols[idx('Marketing Opt-In')] || '',
+        preservedPricing: cols[idx('Preserved Pricing')] || '',
+        proceedsReason: cols[idx('Proceeds Reason')] || '',
+        consecutivePaidPeriods: parseInt(cols[idx('Consecutive Paid Periods')], 10) || 0,
+        originalStartDate: normalizeDate(originalStartRaw),
+        client: cols[idx('Client')] || '',
+        device: cols[idx('Device')] || '',
+        state: cols[idx('State')] || '',
+        country: cols[idx('Country')] || '',
+        previousSubscriptionName: cols[idx('Previous Subscription Name')] || '',
+        daysBeforeCanceling: cols[idx('Days Before Canceling')] || '',
+        cancellationReason: cols[idx('Cancellation Reason')] || '',
+        daysCanceled: cols[idx('Days Canceled')] || '',
+        quantity: parseInt(cols[idx('Quantity')], 10) || 0,
+      });
+    }
+    return rows;
+  }
+
+  /**
+   * Build a cohort retention table for subscribers whose original start date falls between
+   * cohortStart and cohortEnd (inclusive months). Pulls all daily SUBSCRIPTION_EVENT reports
+   * from cohortStart through asOfDate (cached per day) and aggregates.
+   */
+  async getCohortRetention(cohortStart: string, cohortEnd: string, asOfDate?: string): Promise<CohortRetentionResult> {
+    const today = asOfDate ?? new Date().toISOString().slice(0, 10);
+    const dates = enumerateDates(`${cohortStart}-01`, today);
+
+    // Fetch all daily reports in parallel (concurrency-limited). Cache makes re-runs fast.
+    const concurrency = 8;
+    const allEvents: SubscriptionEventRow[] = [];
+    for (let i = 0; i < dates.length; i += concurrency) {
+      const batch = dates.slice(i, i + concurrency);
+      const results = await Promise.all(batch.map(d => this.getSubscriptionEvents(d).catch(() => [] as SubscriptionEventRow[])));
+      for (const r of results) allEvents.push(...r);
+    }
+
+    // Build cohort map: cohort YYYY-MM -> tenure month -> aggregated counts
+    const cohortMonths = enumerateMonths(cohortStart, cohortEnd);
+    const cohorts: CohortMonthRetention[] = [];
+
+    // Apple SUBSCRIPTION_EVENT v1_4 event names (paid app with intro offer / trial):
+    //   "Start Introductory Offer"            = trial signup
+    //   "Paid Subscription from Introductory Offer" = trial converted to paid
+    //   "Subscribe"                            = paid signup with no intro offer
+    //   "Renew"                                = successful auto-renewal
+    //   "Renewal from Billing Retry"           = late renewal after retry
+    //   "Cancel"                               = user disabled auto-renew (still active until period end)
+    //   "Refund"                               = revenue reversed
+    //   "Canceled from Billing Retry"          = subscription ended after billing retry exhausted
+    //   "Reactivate"                           = subscriber returned after lapse
+    const TRIAL_START = ['Start Introductory Offer', 'Start Trial'];
+    const FIRST_PAID = ['Paid Subscription from Introductory Offer', 'Subscribe'];
+    const REACTIVATE = ['Reactivate'];
+    const RENEWAL = ['Renew', 'Renewal from Billing Retry', 'Renewal Recovery'];
+    const CANCEL = ['Cancel', 'Canceled from Billing Retry'];
+    const REFUND = ['Refund'];
+
+    for (const cohort of cohortMonths) {
+      const cohortEvents = allEvents.filter(e => e.originalStartDate.slice(0, 7) === cohort);
+
+      const trialStarts = sumQty(cohortEvents.filter(e => TRIAL_START.includes(e.event)));
+      const firstPaidStarts = sumQty(cohortEvents.filter(e => FIRST_PAID.includes(e.event)));
+      const reactivations = sumQty(cohortEvents.filter(e => REACTIVATE.includes(e.event)));
+      const paidStarts = firstPaidStarts + reactivations;
+      const cohortSize = trialStarts > 0 ? trialStarts : firstPaidStarts;
+
+      const refundedFirstMonth = sumQty(cohortEvents.filter(
+        e => REFUND.includes(e.event) && e.eventDate.slice(0, 7) === cohort,
+      ));
+
+      const maxTenure = monthsBetween(cohort, today.slice(0, 7));
+      const retention: CohortMonthRetention['retention'] = [];
+      for (let t = 0; t <= maxTenure; t++) {
+        const period = addMonths(cohort, t);
+        const eventsInPeriod = cohortEvents.filter(e => e.eventDate.slice(0, 7) === period);
+        const renewals = sumQty(eventsInPeriod.filter(e => RENEWAL.includes(e.event)));
+        const cancels = sumQty(eventsInPeriod.filter(e => CANCEL.includes(e.event)));
+        const refunds = sumQty(eventsInPeriod.filter(e => REFUND.includes(e.event)));
+        // Retention: % of paid starts that generated a renewal event in this calendar month.
+        // (Calendar-month proxy — actual renewal anniversaries don't align to month boundaries.)
+        const retentionPct = paidStarts > 0 && t > 0 ? Math.round((renewals / paidStarts) * 1000) / 10 : null;
+        retention.push({ tenureMonth: t, period, renewals, cancels, refunds, retentionPct });
+      }
+
+      cohorts.push({
+        cohort,
+        cohortSize,
+        trialStarts,
+        paidStarts,
+        firstPaidStarts,
+        reactivations,
+        refundedFirstMonth,
+        retention,
+      });
+    }
+
+    return {
+      cohortStart,
+      cohortEnd,
+      asOfDate: today,
+      cohorts,
+      notes: [
+        'Source: App Store Connect SUBSCRIPTION_EVENT report (DAILY, version 1_4).',
+        'trialStarts = "Start Introductory Offer" / "Start Trial" — funnel entry point.',
+        'paidStarts = "Paid Subscription from Introductory Offer" + "Subscribe" + "Reactivate" — total entries into paying status for this cohort (includes returning subscribers who lapsed and came back).',
+        'cohortSize = trialStarts (or paidStarts if SKU has no trial). Trial→paid rate = paidStarts / trialStarts.',
+        'renewals = Renew + Renewal from Billing Retry events; cancels = Cancel + Canceled from Billing Retry; refunds = Refund.',
+        'retentionPct = renewals in this calendar month / paidStarts. Calendar-month proxy — actual anniversaries do not align to month boundaries, so month 1 retention is suppressed when trial→paid conversion occurs late in a month.',
+        'Cancel means auto-renew was disabled but the user remains active until the current period ends.',
+        'Apple keeps daily reports for 365 days only — earliest cohorts may be incomplete.',
+      ],
+    };
   }
 
   async getDownloads(period: string, byCountry = false): Promise<AppStoreDownloads> {
@@ -408,4 +590,55 @@ export class AppStoreClient {
 async function decompress(data: Uint8Array): Promise<Buffer> {
   const { gunzipSync } = await import('zlib');
   return gunzipSync(Buffer.from(data));
+}
+
+/** Apple emits dates as MM/DD/YYYY in subscription_event TSV — normalize to YYYY-MM-DD. */
+function normalizeDate(raw: string): string {
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[1]}-${m[2]}`;
+  return raw;
+}
+
+function enumerateDates(start: string, end: string): string[] {
+  const dates: string[] = [];
+  const cur = new Date(start + 'T00:00:00Z');
+  const stop = new Date(end + 'T00:00:00Z');
+  while (cur <= stop) {
+    dates.push(cur.toISOString().slice(0, 10));
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+function enumerateMonths(start: string, end: string): string[] {
+  const out: string[] = [];
+  const [sy, sm] = start.split('-').map(Number);
+  const [ey, em] = end.split('-').map(Number);
+  let y = sy, m = sm;
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+
+function addMonths(period: string, n: number): string {
+  const [y, m] = period.split('-').map(Number);
+  const total = y * 12 + (m - 1) + n;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  return `${ny}-${String(nm).padStart(2, '0')}`;
+}
+
+function monthsBetween(a: string, b: string): number {
+  const [ay, am] = a.split('-').map(Number);
+  const [by, bm] = b.split('-').map(Number);
+  return (by - ay) * 12 + (bm - am);
+}
+
+function sumQty(rows: SubscriptionEventRow[]): number {
+  return rows.reduce((s, r) => s + (r.quantity || 0), 0);
 }

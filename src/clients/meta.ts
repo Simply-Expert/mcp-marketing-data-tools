@@ -15,6 +15,9 @@ import type {
   MetaAdConversions,
   MetaAdCountryEntry,
   MetaAdPerformanceByCountry,
+  MetaAdDailySpend,
+  MetaAdDailyEntry,
+  MetaAdDailyCampaignEntry,
 } from '../types.js';
 
 const GRAPH_API_VERSION = 'v25.0';
@@ -598,6 +601,75 @@ export class MetaClient {
       currency: 'USD',
       impressions: parseInt(row?.impressions ?? '0', 10),
       reach: parseInt(row?.reach ?? '0', 10),
+    };
+  }
+
+  // No caching: daily spend for recent dates (incl. today) must be fresh
+  async getAdDailySpend(startDate: string, endDate: string): Promise<MetaAdDailySpend> {
+    if (!this.adAccountId) throw new Error('META_AD_ACCOUNT_ID is not set');
+
+    const rows = await this.graphRequestPaginated<{
+      date_start: string;
+      date_stop: string;
+      campaign_id: string;
+      campaign_name: string;
+      spend: string;
+      impressions: string;
+      clicks: string;
+    }>(
+      `/act_${this.adAccountId}/insights`,
+      {
+        fields: 'campaign_id,campaign_name,spend,impressions,clicks',
+        time_range: JSON.stringify({ since: startDate, until: endDate }),
+        level: 'campaign',
+        time_increment: '1',
+        limit: '500',
+      },
+    );
+
+    const byDate = new Map<string, MetaAdDailyCampaignEntry[]>();
+    for (const row of rows) {
+      const date = row.date_start;
+      const entry: MetaAdDailyCampaignEntry = {
+        campaignId: row.campaign_id,
+        campaignName: row.campaign_name,
+        spend: parseFloat(row.spend ?? '0'),
+        impressions: parseInt(row.impressions ?? '0', 10),
+        clicks: parseInt(row.clicks ?? '0', 10),
+      };
+      const existing = byDate.get(date) ?? [];
+      existing.push(entry);
+      byDate.set(date, existing);
+    }
+
+    const days: MetaAdDailyEntry[] = [...byDate.entries()]
+      .map(([date, campaigns]) => {
+        campaigns.sort((a, b) => b.spend - a.spend);
+        const spend = campaigns.reduce((s, c) => s + c.spend, 0);
+        const impressions = campaigns.reduce((s, c) => s + c.impressions, 0);
+        const clicks = campaigns.reduce((s, c) => s + c.clicks, 0);
+        const activeCampaigns = campaigns.filter(c => c.spend > 0 || c.impressions > 0).length;
+        return {
+          date,
+          spend: Math.round(spend * 100) / 100,
+          impressions,
+          clicks,
+          activeCampaigns,
+          campaigns,
+        };
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const totalSpend = Math.round(days.reduce((s, d) => s + d.spend, 0) * 100) / 100;
+    const lastActive = [...days].reverse().find(d => d.spend > 0 || d.impressions > 0);
+
+    return {
+      startDate,
+      endDate,
+      currency: 'USD',
+      totalSpend,
+      days,
+      lastActiveDate: lastActive?.date ?? null,
     };
   }
 

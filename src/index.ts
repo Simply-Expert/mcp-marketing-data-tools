@@ -17,6 +17,7 @@ import {
   AppStoreReviewsInputSchema,
   AppStoreRatingsInputSchema,
   AppStoreSalesReportInputSchema,
+  AppStoreCohortRetentionInputSchema,
   PlayStoreDownloadsInputSchema,
   PlayStoreRevenueInputSchema,
   PlayStoreReviewsInputSchema,
@@ -27,6 +28,7 @@ import {
   MetaFacebookVideoPostsInputSchema,
   MetaInstagramVideoPostsInputSchema,
   MetaAdSpendInputSchema,
+  MetaAdDailySpendInputSchema,
   MetaAdPerformanceInputSchema,
   MetaAdConversionsInputSchema,
   MetaAdPerformanceByCountryInputSchema,
@@ -35,6 +37,10 @@ import {
   GscTopPagesInputSchema,
   GscByCountryInputSchema,
   GscByDeviceInputSchema,
+  GscQueryPagePairsInputSchema,
+  GscDailyTrendInputSchema,
+  GscBrandedSplitInputSchema,
+  GscBySearchTypeInputSchema,
   ReportCollectDataInputSchema,
   ReportCompareMonthsInputSchema,
   GoalsGetTargetsInputSchema,
@@ -207,6 +213,16 @@ if (process.env.APPSTORE_PRIVATE_KEY_PATH) {
       return { content: [{ type: 'text' as const, text: JSON.stringify({ period, rowCount: result.length, rows: result }, null, 2) }] };
     }
   );
+
+  server.tool(
+    'appstore_get_cohort_retention',
+    'Build a cohort retention table from App Store SUBSCRIPTION_EVENT reports. For each cohort month (subscribers whose Original Start Date falls in that month), returns paid/trial starts and per-tenure-month renewals, cancels, refunds, and retention %. First call is slow (one daily report fetch per day in range); subsequent calls hit cache. Apple retains daily reports for 365 days only.',
+    AppStoreCohortRetentionInputSchema.shape,
+    async ({ cohortStart, cohortEnd, asOfDate }) => {
+      const result = await appStore!.getCohortRetention(cohortStart, cohortEnd, asOfDate);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
 }
 
 // ============================================================
@@ -327,6 +343,16 @@ if (process.env.META_ACCESS_TOKEN) {
   );
 
   server.tool(
+    'meta_get_ad_daily_spend',
+    'Get daily Meta ad spend (per-campaign + totals) over a date range. Use to check if ads are still running.',
+    MetaAdDailySpendInputSchema.shape,
+    async ({ start_date, end_date }) => {
+      const result = await meta!.getAdDailySpend(start_date, end_date);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
     'meta_get_ad_performance',
     'Get Meta campaign-level ad performance metrics (CTR, CPC, CPM)',
     MetaAdPerformanceInputSchema.shape,
@@ -414,6 +440,46 @@ if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH && process.env.GOOGLE_SEARCH_CON
     GscByDeviceInputSchema.shape,
     async ({ period }) => {
       const result = await getGsc().getPerformanceByDevice(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'gsc_get_query_page_pairs',
+    'Get query+page combinations from Google Search Console for a given month — shows which queries drive traffic to which pages (highest-value SEO insight)',
+    GscQueryPagePairsInputSchema.shape,
+    async ({ period, limit }) => {
+      const result = await getGsc().getQueryPagePairs(period, limit);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'gsc_get_daily_trend',
+    'Get day-by-day clicks/impressions/CTR/position within a given month from Google Search Console (useful for spotting sudden drops or spikes)',
+    GscDailyTrendInputSchema.shape,
+    async ({ period }) => {
+      const result = await getGsc().getDailyTrend(period);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'gsc_get_branded_split',
+    'Split Google Search Console metrics into branded vs non-branded queries (branded = query matches any of the given brand terms, case-insensitive)',
+    GscBrandedSplitInputSchema.shape,
+    async ({ period, brandTerms }) => {
+      const result = await getGsc().getBrandedSplit(period, brandTerms);
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'gsc_get_by_search_type',
+    'Get metrics broken down by search type (web, image, video, news) from Google Search Console for a given month',
+    GscBySearchTypeInputSchema.shape,
+    async ({ period }) => {
+      const result = await getGsc().getBySearchType(period);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     }
   );

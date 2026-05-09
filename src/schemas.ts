@@ -71,6 +71,12 @@ export const AppStoreSalesReportInputSchema = z.object({
   productType: z.string().optional().describe('Filter by Product Type ID, e.g. "IAY" for subscriptions, "1F" for first-time downloads'),
 });
 
+export const AppStoreCohortRetentionInputSchema = z.object({
+  cohortStart: PeriodSchema.describe('First cohort month (YYYY-MM) — subscribers whose original start date falls in this month or later'),
+  cohortEnd: PeriodSchema.describe('Last cohort month (YYYY-MM, inclusive)'),
+  asOfDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Compute retention through this date (YYYY-MM-DD). Defaults to today.'),
+});
+
 // ============================================================
 // Google Play Schemas
 // ============================================================
@@ -122,6 +128,11 @@ export const MetaAdSpendInputSchema = z.object({
   period: PeriodSchema.describe('Month to query in YYYY-MM format'),
 });
 
+export const MetaAdDailySpendInputSchema = z.object({
+  start_date: DateSchema.describe('Start date in YYYY-MM-DD format'),
+  end_date: DateSchema.describe('End date in YYYY-MM-DD format'),
+});
+
 export const MetaAdPerformanceInputSchema = z.object({
   period: PeriodSchema.describe('Month to query in YYYY-MM format'),
 });
@@ -157,6 +168,28 @@ export const GscByCountryInputSchema = z.object({
 });
 
 export const GscByDeviceInputSchema = z.object({
+  period: PeriodSchema.describe('Month to query in YYYY-MM format'),
+});
+
+export const GscQueryPagePairsInputSchema = z.object({
+  period: PeriodSchema.describe('Month to query in YYYY-MM format'),
+  limit: z.number().optional().default(50).describe('Max query+page pairs to return'),
+});
+
+export const GscDailyTrendInputSchema = z.object({
+  period: PeriodSchema.describe('Month to query in YYYY-MM format'),
+});
+
+export const GscBrandedSplitInputSchema = z.object({
+  period: PeriodSchema.describe('Month to query in YYYY-MM format'),
+  brandTerms: z
+    .array(z.string())
+    .optional()
+    .default(['noory'])
+    .describe('Brand terms to match in queries (case-insensitive regex, OR-combined)'),
+});
+
+export const GscBySearchTypeInputSchema = z.object({
   period: PeriodSchema.describe('Month to query in YYYY-MM format'),
 });
 

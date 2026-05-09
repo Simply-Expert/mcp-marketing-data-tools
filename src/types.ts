@@ -180,6 +180,57 @@ export interface AppStoreSalesRow {
   promoCode: string;
 }
 
+export interface SubscriptionEventRow {
+  eventDate: string;          // YYYY-MM-DD
+  event: string;              // "Subscribe", "Start Trial", "Renew", "Cancel", "Refund", "Reactivate", "Failed Renewal", "Renewal Recovery", "Crossgrade", etc.
+  appAppleId: string;
+  subscriptionAppleId: string;
+  subscriptionGroupId: string;
+  standardSubscriptionDuration: string;
+  subscriptionOfferType: string;
+  subscriptionOfferDuration: string;
+  marketingOptIn: string;
+  preservedPricing: string;
+  proceedsReason: string;
+  consecutivePaidPeriods: number;
+  originalStartDate: string;  // YYYY-MM-DD
+  client: string;
+  device: string;
+  state: string;
+  country: string;
+  previousSubscriptionName: string;
+  daysBeforeCanceling: string;
+  cancellationReason: string;
+  daysCanceled: string;
+  quantity: number;
+}
+
+export interface CohortMonthRetention {
+  cohort: string;                            // YYYY-MM
+  cohortSize: number;                        // initial paid SUBSCRIBE count (or START_TRIAL if includeTrials=true)
+  trialStarts: number;                       // START_TRIAL events
+  paidStarts: number;                        // first-paid + reactivate events
+  firstPaidStarts: number;                   // first-time paid only (excludes Reactivate) — use for trial→paid rate
+  reactivations: number;                     // Reactivate events with OSD in cohort month
+  refundedFirstMonth: number;
+  retention: Array<{
+    tenureMonth: number;                     // 0 = month of start, 1 = next month, etc.
+    period: string;                          // YYYY-MM
+    renewals: number;                        // RENEW + RENEWAL_RECOVERY events from this cohort in this period
+    cancels: number;                         // CANCEL events (auto-renew off)
+    refunds: number;                         // REFUND events
+    retentionPct: number | null;             // renewals / paidStarts (null if month is in the future)
+  }>;
+}
+
+export interface CohortRetentionResult {
+  cohortStart: string;        // YYYY-MM
+  cohortEnd: string;          // YYYY-MM
+  asOfDate: string;           // YYYY-MM-DD
+  cohorts: CohortMonthRetention[];
+  notes: string[];
+}
+
 // ============================================================
 // Google Play Types
 // ============================================================
@@ -310,6 +361,32 @@ export interface MetaAdSpend {
   reach: number;
 }
 
+export interface MetaAdDailyCampaignEntry {
+  campaignId: string;
+  campaignName: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+}
+
+export interface MetaAdDailyEntry {
+  date: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  activeCampaigns: number;
+  campaigns: MetaAdDailyCampaignEntry[];
+}
+
+export interface MetaAdDailySpend {
+  startDate: string;
+  endDate: string;
+  currency: string;
+  totalSpend: number;
+  days: MetaAdDailyEntry[];
+  lastActiveDate: string | null;
+}
+
 export interface MetaCampaignPerformance {
   campaignId: string;
   campaignName: string;
@@ -433,6 +510,60 @@ export interface SearchConsoleDeviceEntry {
 export interface SearchConsoleByDevice {
   period: Period;
   devices: SearchConsoleDeviceEntry[];
+}
+
+export interface SearchConsoleQueryPageEntry {
+  query: string;
+  page: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchConsoleQueryPagePairs {
+  period: Period;
+  pairs: SearchConsoleQueryPageEntry[];
+}
+
+export interface SearchConsoleDayEntry {
+  date: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchConsoleDailyTrend {
+  period: Period;
+  days: SearchConsoleDayEntry[];
+}
+
+export interface SearchConsoleMetrics {
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchConsoleBrandedSplit {
+  period: Period;
+  brandTerms: string[];
+  branded: SearchConsoleMetrics;
+  nonBranded: SearchConsoleMetrics;
+}
+
+export interface SearchConsoleSearchTypeEntry {
+  searchType: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchConsoleBySearchType {
+  period: Period;
+  searchTypes: SearchConsoleSearchTypeEntry[];
 }
 
 // ============================================================
